@@ -1,0 +1,33 @@
+:root {
+    --bg-pos-1: '0% 0%';
+    --bg-pos-2: '50% 50%';
+    --bg-pos-3: '100% 100%';
+}
+
+.background {
+    background-image:
+        url('../../assets/images/Blend Group 1.png'),
+        url('../../assets/images/Ellipse 118.png'),
+        url('../../assets/images/Ellipse 118.png'),
+        url('../../assets/images/Rectangle 231.png');
+    background-size: 20%, 20%, 30%, cover;
+    background-repeat: no-repeat, no-repeat, no-repeat;
+    background-position: var(--bg-pos-1), var(--bg-pos-2), var(--bg-pos-3), center;
+    transition: background-position 10s ease-in-out;
+}
+
+.awe {
+    background-color: rgba(255, 255, 255, 0.8);
+}
+
+.gradient-text {
+    background: linear-gradient(to right, #4f46e5, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+}
+
+.gradient-bg {
+    background: linear-gradient(to right, #4f46e5, #3b82f6);
+}

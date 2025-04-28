@@ -1,0 +1,156 @@
+:root {
+    --bg-pos-1: '0% 0%';
+    --bg-pos-2: '50% 50%';
+    --bg-pos-3: '100% 100%';
+    --bg-pos-4: 'center';
+}
+
+.home-background {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background-image:
+        url('../../assets/images/Blend Group 1.png'),
+        url('../../assets/images/Ellipse 118.png'),
+        url('../../assets/images/Ellipse 118.png'),
+        url('../../assets/images/Rectangle 231.png');
+    background-size: 20%, 20%, 30%, cover;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+    background-position:
+        var(--bg-pos-1),
+        var(--bg-pos-2),
+        var(--bg-pos-3),
+        var(--bg-pos-4);
+    transition: background-position 10s ease-in-out;
+    position: relative;
+}
+
+.home-background::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+    z-index: 0;
+}
+
+.home-content {
+    position: relative;
+    z-index: 1;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    color: white;
+}
+
+.home-logo {
+    width: 96px;
+    height: 112px;
+    margin: 0 auto 1rem;
+}
+
+.home-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+}
+
+.home-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.home-button {
+    padding: 0.5rem 1rem;
+    width: 128px;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.primary-button {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.primary-button:hover {
+    background-color: #2563eb;
+}
+
+/* Features section */
+.features-section {
+    margin-top: 3rem;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.feature-card {
+    background-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+}
+
+.feature-card h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: #f8fafc;
+}
+
+.feature-card p {
+    color: #e2e8f0;
+    font-size: 0.875rem;
+}
+
+/* About section */
+.about-section {
+    margin-top: 3rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+}
+
+.about-section h2 {
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.about-section p {
+    line-height: 1.6;
+    color: #e2e8f0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .home-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .home-content {
+        padding: 1rem;
+    }
+}

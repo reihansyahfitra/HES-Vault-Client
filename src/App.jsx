@@ -10,6 +10,9 @@ import Layout from './components/layout/Layout';
 import ProductsPage from './pages/Products/ProductsPage';
 import ProductDetailsPage from './pages/Products/ProductDetailsPage';
 import CartPage from './pages/Cart/CartPage';
+import RentFormPage from './pages/Rent/RentFormPage';
+import RentalsPage from './pages/Rent/RentalsPage';
+import RentalDetailPage from './pages/Rent/RentalDetailPage';
 import './App.css';
 
 function App() {
@@ -44,6 +47,9 @@ function App() {
                 },
               },
             }}
+            containerStyle={{
+              top: 80
+            }}
           />
           <Routes>
             <Route path="/" element={<Home />} />
@@ -69,6 +75,30 @@ function App() {
                 <CartPage />
               </ProtectedRoute>
             } />
+            <Route
+              path="/rent/create"
+              element={
+                <ProtectedRoute>
+                  <RentFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rentals"
+              element={
+                <ProtectedRoute>
+                  <RentalsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rentals/:id"
+              element={
+                <ProtectedRoute>
+                  <RentalDetailPage />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Layout>
       </main>

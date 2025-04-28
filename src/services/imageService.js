@@ -131,7 +131,50 @@ class ImageService {
         if (!['before', 'after', 'identification'].includes(docType)) {
             throw new Error('Invalid document type. Must be "before", "after", or "identification"');
         }
-        return this.uploadImage(`/images/rent/${rentId}/${docType}`, imageFile);
+
+        // Check if formData is already a FormData object
+        if (!(formData instanceof FormData)) {
+            // If it's a File object, create FormData
+            if (formData instanceof File) {
+                const fileData = new FormData();
+                fileData.append('image', formData);
+                formData = fileData;
+            } else {
+                console.error('Invalid formData type:', typeof formData);
+                throw new Error('FormData or File object expected');
+            }
+        }
+
+        const token = this.getToken();
+
+        try {
+            console.log(`Uploading to: ${this.baseUrl}/images/rent/${rentId}/${docType}`);
+            console.log('Token present:', !!token);
+
+            const response = await fetch(`${this.baseUrl}/images/rent/${rentId}/${docType}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': token ? `Bearer ${token}` : '',
+                },
+                body: formData
+            });
+
+            const result = await response.json();
+            console.log('Upload response:', result);
+
+            return {
+                ok: response.ok,
+                status: response.status,
+                data: result
+            };
+        } catch (error) {
+            console.error(`Image upload failed:`, error);
+            return {
+                ok: false,
+                status: 500,
+                data: { message: error.message }
+            };
+        }
     }
 
     /**

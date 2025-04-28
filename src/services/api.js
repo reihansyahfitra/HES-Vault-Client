@@ -135,24 +135,72 @@ class ApiService {
     }
 
     // Rentals/Orders endpoints
-    getRentals() {
-        return this.request('/rent');
+    async getAllRentals(params = {}) {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append('page', params.page);
+        if (params.status) queryParams.append('status', params.status);
+        if (params.search) queryParams.append('search', params.search);
+
+        const queryString = queryParams.toString();
+        console.log(`Making API call: /rent${queryString ? '?' + queryString : ''}`);
+        return this.request(`/rent${queryString ? '?' + queryString : ''}`);
     }
 
-    getUserRentals() {
-        return this.request('/rent/my');
+    async getUserRentals(params = {}) {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append('page', params.page);
+        if (params.status) queryParams.append('status', params.status);
+        if (params.search) queryParams.append('search', params.search);
+
+        const queryString = queryParams.toString();
+        console.log(`Making API call: /rent/my${queryString ? '?' + queryString : ''}`);
+        return this.request(`/rent/my${queryString ? '?' + queryString : ''}`);
     }
 
-    getRental(id) {
+    async updateRentalStatus(rentalId, status, type = 'order') {
+        return this.request(`/rent/${rentalId}/status`, 'PUT', {
+            type,
+            status
+        });
+    }
+
+    async getRentalById(id) {
         return this.request(`/rent/${id}`);
     }
 
-    createRental(rentalData) {
-        return this.request('/rent', 'POST', rentalData);
+    async createRent(rentData) {
+        const transformedData = {
+            identification: rentData.identification,
+            phone: rentData.phone,
+            notes: rentData.notes,
+            cart_id: rentData.cart_id,
+            start_date: rentData.start_date || rentData.startDate, // Backend expects start_date
+            end_date: rentData.end_date || rentData.endDate,    // Backend expects end_date
+            identification_picture: rentData.identification_picture
+        };
+        console.log("Sending to API:", transformedData);
+
+        return this.request('/rent', 'POST', transformedData);
     }
 
-    updateRentalStatus(id, statusData) {
-        return this.request(`/orders/${id}/status`, 'PUT', statusData);
+    async updateRentDocumentationBefore(rentId, imagePath) {
+        return this.request(`/rent/${rentId}/documentation-before`, 'PUT', {
+            documentation_before: imagePath
+        });
+    }
+
+    async updateRentDocumentationAfter(rentId, imagePath) {
+        return this.request(`/rent/${rentId}/documentation-after`, 'PUT', {
+            documentation_after: imagePath
+        });
+    }
+
+    async updateRentDocumentPath(oldPath, newRentId, docType) {
+        return this.request('/images/rent/update-path', 'PUT', {
+            oldPath,
+            newRentId,
+            docType
+        });
     }
 
     // Cart endpoints

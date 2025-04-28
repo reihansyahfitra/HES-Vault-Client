@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { Toaster } from 'react-hot-toast';
 import LoginForm from './components/auth/LoginForm';
 import RegisterForm from './components/auth/RegisterForm';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -8,6 +9,7 @@ import Home from './components/home/Home';
 import Layout from './components/layout/Layout';
 import ProductsPage from './pages/Products/ProductsPage';
 import ProductDetailsPage from './pages/Products/ProductDetailsPage';
+import CartPage from './pages/Cart/CartPage';
 import './App.css';
 
 function App() {
@@ -21,6 +23,28 @@ function App() {
     <div className="app m-0">
       <main className="container mx-auto">
         <Layout>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#fff',
+                color: '#333',
+              },
+              success: {
+                iconTheme: {
+                  primary: '#10B981',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#EF4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<LoginForm />} />
@@ -38,6 +62,11 @@ function App() {
             <Route path="/products/:id" element={
               <ProtectedRoute>
                 <ProductDetailsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/cart" element={
+              <ProtectedRoute>
+                <CartPage />
               </ProtectedRoute>
             } />
           </Routes>

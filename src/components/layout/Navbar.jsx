@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logoImage from '../../assets/images/logo_text.png';
 import { useAuth } from '../../context/AuthContext';
+import { useCart } from '../../context/CartContext';
 import api from '../../services/api';
 import './Navbar.css';
 
 function Navbar() {
     const { user, logout } = useAuth();
+    const { cartCount } = useCart();
     const location = useLocation();
     const [isAdmin, setIsAdmin] = useState(false);
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -97,7 +99,10 @@ function Navbar() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                                 d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
-                        <span className="badge badge-sm indicator-item">{0}</span>
+                        {cartCount > 0 && (
+                            //red badge
+                            <span className="badge badge-xs badge-secondary indicator-item">{cartCount}</span>
+                        )}
                     </div>
                 </Link>
 

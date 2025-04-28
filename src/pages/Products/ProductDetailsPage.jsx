@@ -5,6 +5,8 @@ import api from '../../services/api';
 import imageService from '../../services/imageService';
 import Spinner from '../../components/common/Spinner';
 import ProductForm from '../../components/products/ProductForm';
+import { toast } from 'react-hot-toast';
+import { useCart } from '../../context/CartContext';
 
 function ProductDetailsPage() {
     const { id } = useParams();
@@ -17,6 +19,8 @@ function ProductDetailsPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [categories, setCategories] = useState([]);
     const [rentQuantity, setRentQuantity] = useState(1);
+    const [addingToCart, setAddingToCart] = useState(false);
+    const { addToCart: contextAddToCart } = useCart();
 
     const isAdmin = user?.team?.slug === 'administrator';
 
@@ -82,6 +86,32 @@ function ProductDetailsPage() {
             setError('Failed to update product. Please try again.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddToCart = async () => {
+        if (!product.is_rentable || product.quantity <= 0 || addingToCart) {
+            return;
+        }
+
+        try {
+            setAddingToCart(true);
+            const response = await contextAddToCart(product.id, rentQuantity);
+
+            if (response.ok) {
+                // Show success notification
+                toast.success(`${rentQuantity} × ${product.name} added to cart`, {
+                    icon: '🛒',
+                });
+            } else {
+                // Show error notification
+                toast.error(response.data?.message || "Failed to add item to cart");
+            }
+        } catch (err) {
+            console.error('Error adding to cart:', err);
+            toast.error("Failed to add item to cart. Please try again.");
+        } finally {
+            setAddingToCart(false);
         }
     };
 
@@ -230,15 +260,16 @@ function ProductDetailsPage() {
 
                         <div className="flex flex-col mb-6">
                             {/* Price and Stock info */}
-                            <div className="text-3xl font-bold text-primary mb-4">
+                            <div className="text-3xl font-bold text-primary mb-4 flex items-baseline">
                                 Rp {product.price.toLocaleString('id-ID')}
+                                <span className="text-sm font-normal text-gray-500 ml-2">per week</span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2 mb-6">
                                 <div>Stock: {product.quantity} units</div>
 
                                 {product.is_rentable && (
-                                    <div className="badge badge-accent py-2 px-3">
+                                    <div className="font-semibold badge badge-accent py-2 px-3">
                                         Available for rent
                                     </div>
                                 )}
@@ -246,13 +277,14 @@ function ProductDetailsPage() {
 
                             {/* Rent/Cart Controls - Only show if product is rentable and in stock */}
                             {product.is_rentable && product.quantity > 0 && (
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center">
+                                <>
+                                    <div className="flex items-center mb-4">
                                         <span className="mr-3">Quantity:</span>
                                         <div className="join">
                                             <button
                                                 className="btn btn-sm join-item"
                                                 onClick={() => setRentQuantity(Math.max(1, rentQuantity - 1))}
+                                                disabled={addingToCart}
                                             >
                                                 -
                                             </button>
@@ -261,26 +293,35 @@ function ProductDetailsPage() {
                                                 className="input input-bordered input-sm join-item w-14 text-center"
                                                 value={rentQuantity}
                                                 onChange={handleRentQuantityChange}
+                                                disabled={addingToCart}
                                             />
                                             <button
                                                 className="btn btn-sm join-item"
                                                 onClick={() => setRentQuantity(Math.min(product.quantity, rentQuantity + 1))}
+                                                disabled={addingToCart}
                                             >
                                                 +
                                             </button>
                                         </div>
                                     </div>
 
-                                    <Link
-                                        to={`/rent/create?product=${product.id}&quantity=${rentQuantity}`}
-                                        className="btn btn-accent"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                        Rent Now
-                                    </Link>
-                                </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleAddToCart}
+                                            className="btn btn-primary flex-1"
+                                            disabled={addingToCart}
+                                        >
+                                            {addingToCart ? (
+                                                <span className="loading loading-spinner loading-xs mr-2"></span>
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                                                </svg>
+                                            )}
+                                            Add to Cart
+                                        </button>
+                                    </div>
+                                </>
                             )}
                         </div>
 

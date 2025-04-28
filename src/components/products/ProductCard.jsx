@@ -43,8 +43,9 @@ function ProductCard({ product, isAdmin, onEdit, onDelete }) {
                 <h2 className="card-title text-lg">{product.name}</h2>
                 <p className="text-sm text-gray-500">{product.brand}</p>
                 <div className="flex justify-between items-center mt-2">
-                    <span className="text-primary font-bold">
+                    <span className="text-primary font-bold flex items-baseline">
                         Rp{product.price.toLocaleString('id-ID')}
+                        <span className="text-xs font-normal text-gray-500 ml-1">/ week</span>
                     </span>
                     <span className="text-sm">
                         Stock: {product.quantity}

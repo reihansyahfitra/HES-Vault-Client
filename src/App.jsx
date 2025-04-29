@@ -16,6 +16,7 @@ import RentalDetailPage from './pages/Rent/RentalDetailPage';
 import CategoriesPage from './pages/Categories/CategoriesPage';
 import './App.css';
 import UsersPage from './pages/Users/UsersPage';
+import UserDetailsPage from './pages/Users/UserDetailsPage';
 
 function App() {
   const { loading } = useAuth();
@@ -112,6 +113,13 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/users/:id"
+              element={
+                <ProtectedRoute>
+                  <UserDetailsPage />
                 </ProtectedRoute>
               }
             />

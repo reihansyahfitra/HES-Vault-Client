@@ -273,6 +273,12 @@ function ProductDetailsPage() {
                                         Available for rent
                                     </div>
                                 )}
+
+                                {!product.is_rentable && (
+                                    <div className="font-semibold badge badge-secondary py-2 px-3">
+                                        Unavailable for rent
+                                    </div>
+                                )}
                             </div>
 
                             {/* Rent/Cart Controls - Only show if product is rentable and in stock */}

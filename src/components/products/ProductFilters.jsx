@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 function ProductFilters({ categories, selectedCategory, onApply, onClose }) {
+    const { user } = useAuth();
+    const isAdmin = user?.team?.slug === 'administrator';
     const [categoryFilter, setCategoryFilter] = useState(selectedCategory);
     const [showLowStock, setShowLowStock] = useState(false);
 
@@ -8,7 +11,7 @@ function ProductFilters({ categories, selectedCategory, onApply, onClose }) {
         e.preventDefault();
         onApply({
             category: categoryFilter,
-            lowStock: showLowStock
+            lowStock: isAdmin ? showLowStock : false
         });
     };
 
@@ -50,22 +53,25 @@ function ProductFilters({ categories, selectedCategory, onApply, onClose }) {
                                             </select>
                                         </div>
 
-                                        <div className="form-control w-full mb-4">
-                                            <label className="label cursor-pointer">
-                                                <span className="label-text">Show Low Stock Items Only</span>
-                                                <input
-                                                    type="checkbox"
-                                                    className="toggle toggle-warning"
-                                                    checked={showLowStock}
-                                                    onChange={() => setShowLowStock(!showLowStock)}
-                                                />
-                                            </label>
-                                            {showLowStock && (
-                                                <div className="text-xs text-warning mt-1">
-                                                    Shows items where quantity is at or below minimum threshold
-                                                </div>
-                                            )}
-                                        </div>
+                                        {/* Only show low stock filter to administrators */}
+                                        {isAdmin && (
+                                            <div className="form-control w-full mb-4">
+                                                <label className="label cursor-pointer">
+                                                    <span className="label-text">Show Low Stock Items Only</span>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="toggle toggle-warning"
+                                                        checked={showLowStock}
+                                                        onChange={() => setShowLowStock(!showLowStock)}
+                                                    />
+                                                </label>
+                                                {showLowStock && (
+                                                    <div className="text-xs text-warning mt-1">
+                                                        Shows items where quantity is at or below minimum threshold
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="mt-6 flex justify-end space-x-3">
                                             <button

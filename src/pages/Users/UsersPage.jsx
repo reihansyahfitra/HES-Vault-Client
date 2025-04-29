@@ -21,6 +21,8 @@ function UsersPage() {
     const [sortBy, setSortBy] = useState('created_at');
     const [sortOrder, setSortOrder] = useState('desc');
     const [teams, setTeams] = useState([]);
+    const [teamsLoaded, setTeamsLoaded] = useState(false);
+    const [statsLoaded, setStatsLoaded] = useState(false);
 
     const [userStats, setUserStats] = useState({
         total: 0,
@@ -34,12 +36,68 @@ function UsersPage() {
             return;
         }
 
-        // Fetch teams on initial load
-        fetchTeams();
-        // Fetch user stats on initial load
-        fetchUserStats();
+        // Track if component is still mounted
+        let isMounted = true;
 
-    }, [isAdmin]); // Only run this effect once on component mount
+        const loadData = async () => {
+            setLoading(true);
+
+            try {
+                // First load teams
+                const teamsList = await fetchTeams();
+
+                if (!isMounted) return;
+
+                // Then load user stats
+                const stats = await fetchUserStats();
+
+                if (!isMounted) return;
+
+                // Finally load users with current filters
+                const filterParams = {
+                    page: currentPage,
+                    limit: 10,
+                    search: search || undefined,
+                    sort: sortBy,
+                    order: sortOrder,
+                    team: filter === 'all' ? undefined : filter
+                };
+
+                console.log("Fetching users with params:", filterParams);
+
+                const response = await api.getUsers(filterParams);
+
+                if (!isMounted) return;
+
+                if (response.ok) {
+                    setUsers(response.data.data || []);
+
+                    // Set pagination info
+                    if (response.data.pagination) {
+                        setTotalPages(response.data.pagination.pages || 1);
+                    } else {
+                        setTotalPages(1);
+                    }
+                }
+            } catch (err) {
+                if (isMounted) {
+                    console.error('Error loading data:', err);
+                    setError("Failed to load users. Please try again.");
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        loadData();
+
+        // Cleanup function to prevent state updates after unmount
+        return () => {
+            isMounted = false;
+        };
+    }, [isAdmin, filter, currentPage, search, sortBy, sortOrder]); // Only run this effect once on component mount
 
     // Fix 5: Keep the existing useEffect for fetching users when filters change
     useEffect(() => {
@@ -49,38 +107,60 @@ function UsersPage() {
         fetchUsers();
     }, [isAdmin, filter, currentPage, search, sortBy, sortOrder]);
 
+    const updateUserStats = (apiStats, teamsList) => {
+        // Create a deep copy of existing stats to avoid reference issues
+        const updatedStats = {
+            total: apiStats?.total || 0,
+            teamCounts: {}
+        };
+
+        // First, ensure every team has an entry
+        if (teamsList && teamsList.length > 0) {
+            teamsList.forEach(team => {
+                updatedStats.teamCounts[team.slug] = {
+                    count: 0,
+                    name: team.name,
+                    color: getTeamColor(team.slug)
+                };
+            });
+        }
+
+        // Then overlay the API stats data
+        if (apiStats && apiStats.teamCounts) {
+            Object.entries(apiStats.teamCounts).forEach(([slug, data]) => {
+                updatedStats.teamCounts[slug] = {
+                    count: data.count || 0,
+                    name: data.name || (updatedStats.teamCounts[slug]?.name || slug),
+                    color: getTeamColor(slug)
+                };
+            });
+        }
+
+        console.log("Updated user stats:", updatedStats);
+        return updatedStats;
+    };
+
+
+
     const fetchTeams = async () => {
+        // If teams are already loaded, don't fetch again
+        if (teamsLoaded && teams.length > 0) {
+            return teams;
+        }
+
         try {
             const response = await api.request('/teams', 'GET', null, true);
-            console.log(response.data.data);
             if (response.ok) {
-                setTeams(response.data.data || []);
-
-                // Create team stats for all teams, even ones with 0 users
-                const teamCounts = { ...userStats.teamCounts };
-
-                // Ensure all teams are represented in userStats
-                response.data.data.forEach(team => {
-                    if (!teamCounts[team.slug]) {
-                        teamCounts[team.slug] = {
-                            count: 0,
-                            name: team.name,
-                            color: getTeamColor(team.slug)
-                        };
-                    } else if (!teamCounts[team.slug].color) {
-                        // Add color if missing
-                        teamCounts[team.slug].color = getTeamColor(team.slug);
-                    }
-                });
-
-                setUserStats(prev => ({
-                    ...prev,
-                    teamCounts
-                }));
+                const teamsList = response.data.data || [];
+                console.log("Teams loaded:", teamsList);
+                setTeams(teamsList);
+                setTeamsLoaded(true);
+                return teamsList;
             }
         } catch (err) {
             console.error('Error fetching teams:', err);
         }
+        return [];
     };
 
     const fetchUsers = async () => {
@@ -133,24 +213,27 @@ function UsersPage() {
     const fetchUserStats = async () => {
         try {
             const response = await api.request('/users/stats', 'GET', null, true);
-            console.log(response.data);
             if (response.ok && response.data) {
-                // Add colors to team stats
-                const teamCounts = { ...response.data.teamCounts };
+                // Create a completely new object for userStats to avoid reference issues
+                const updatedStats = updateUserStats(response.data, teams);
+                console.log("Setting user stats with teams data:", updatedStats);
 
-                // Apply colors to each team
-                Object.keys(teamCounts).forEach(slug => {
-                    teamCounts[slug].color = getTeamColor(slug);
+                // Use a functional update to ensure we have the latest state
+                setUserStats(prev => {
+                    // Only update if the counts are different or we have new data
+                    if (JSON.stringify(prev.teamCounts) !== JSON.stringify(updatedStats.teamCounts)) {
+                        return updatedStats;
+                    }
+                    return prev;
                 });
 
-                setUserStats({
-                    total: response.data.total || 0,
-                    teamCounts
-                });
+                setStatsLoaded(true);
+                return updatedStats;
             }
         } catch (err) {
             console.error('Error fetching user stats:', err);
         }
+        return null;
     };
 
     const calculateUserStats = (users, teams) => {

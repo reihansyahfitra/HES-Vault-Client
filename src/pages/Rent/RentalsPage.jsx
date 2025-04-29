@@ -20,6 +20,16 @@ function RentalsPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [uploading, setUploading] = useState(null);
     const isAdmin = user?.team?.slug === 'administrator';
+    const [totalStatusCounts, setTotalStatusCounts] = useState({
+        all: 0,
+        waiting: 0,
+        approved: 0,
+        active: 0,
+        overdue: 0,
+        returned: 0,
+        rejected: 0,
+        cancelled: 0
+    });
 
     useEffect(() => {
         if (location.state?.success) {
@@ -38,14 +48,35 @@ function RentalsPage() {
         try {
             let response;
 
+            const allRentalsParams = { limit: 100 }
+
+            let allRentalsResponse;
+            if (isAdmin) {
+                allRentalsResponse = await api.getAllRentals(allRentalsParams);
+            } else {
+                allRentalsResponse = await api.getUserRentals(allRentalsParams);
+            }
+
+            if (allRentalsResponse.ok) {
+                calculateTotalStatusCounts(allRentalsResponse.data.data || []);
+            }
+
             const queryParams = {
-                page: currentPage,
-                search
+                page: currentPage
             };
 
+            if (search) {
+                queryParams.search = search;
+            }
+
             if (filter !== 'all') {
-                const apiStatus = filter === 'active' ? 'ONRENT' : filter.toUpperCase();
-                queryParams.status = apiStatus;
+                let apiFilter = filter.toUpperCase();
+                if (filter === 'active') {
+                    apiFilter = 'ONRENT';
+                } else if (filter === 'completed') {
+                    apiFilter = 'RETURNED';
+                }
+                queryParams.status = apiFilter;
             }
 
             console.log("Fetching rentals with params:", queryParams);
@@ -56,18 +87,21 @@ function RentalsPage() {
                 response = await api.getUserRentals(queryParams);
             }
 
-            console.log("API response:", response.data);
+            console.log("API response:", response.data.pagination.page);
 
             if (response.ok) {
-                setRentals(response.data || []);
+                setRentals(response.data.data || []);
 
                 // Set pagination info
                 if (response.data.pagination) {
-                    setTotalPages(response.data.data.page || 1);
+                    setTotalPages(response.data.pagination.page || 1);
                 } else {
                     setTotalPages(1);
                 }
-                calculateStatusCounts(response.data.data || []);
+                setStatusCounts({
+                    ...totalStatusCounts,
+                    [filter]: response.data.data?.length || 0
+                });
             } else {
                 setError("Failed to load rentals. Please try again.");
             }
@@ -80,12 +114,12 @@ function RentalsPage() {
         }
     };
 
-    const calculateStatusCounts = (rentals) => {
+    const calculateTotalStatusCounts = (rentals) => {
         const counts = {
             all: rentals.length,
             waiting: 0,
             approved: 0,
-            active: 0, // This combines ONRENT and ACTIVE
+            active: 0,
             overdue: 0,
             returned: 0,
             rejected: 0,
@@ -95,15 +129,20 @@ function RentalsPage() {
         rentals.forEach(rental => {
             const status = rental.order?.order_status?.toLowerCase();
             if (status) {
-                if (status === 'onrent' || status === 'active') {
+                // Map database statuses to UI status names
+                if (status === 'onrent') {
                     counts.active++;
-                } else if (counts[status] !== undefined) {
+                }
+                else if (status === 'returned') {
+                    counts.returned++;
+                }
+                else if (counts[status] !== undefined) {
                     counts[status]++;
                 }
             }
         });
 
-        setStatusCounts(counts);
+        setTotalStatusCounts(counts);
     };
 
     const handleStatusChange = (newStatus) => {
@@ -374,29 +413,35 @@ function RentalsPage() {
 
             {/* Status summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'all' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('all')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'all' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('all')}>
                     <div className="stat-title">All Rentals</div>
-                    <div className="stat-value text-center">{statusCounts.all || 0}</div>
+                    <div className="stat-value text-center">{totalStatusCounts.all || 0}</div>
                 </div>
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'waiting' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('waiting')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'waiting' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('waiting')}>
                     <div className="stat-title">Waiting</div>
-                    <div className="stat-value text-center text-warning">{statusCounts.waiting || 0}</div>
+                    <div className="stat-value text-center text-warning">{totalStatusCounts.waiting || 0}</div>
                 </div>
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'approved' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('approved')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'approved' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('approved')}>
                     <div className="stat-title">Approved</div>
-                    <div className="stat-value text-center text-info">{statusCounts.approved || 0}</div>
+                    <div className="stat-value text-center text-info">{totalStatusCounts.approved || 0}</div>
                 </div>
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'active' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('active')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'active' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('active')}>
                     <div className="stat-title">On Rent</div>
-                    <div className="stat-value text-center text-success">{statusCounts.active || 0}</div>
+                    <div className="stat-value text-center text-success">{totalStatusCounts.active || 0}</div>
                 </div>
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'overdue' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('overdue')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'overdue' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('overdue')}>
                     <div className="stat-title">Overdue</div>
-                    <div className="stat-value text-center text-error">{statusCounts.overdue || 0}</div>
+                    <div className="stat-value text-center text-error">{totalStatusCounts.overdue || 0}</div>
                 </div>
-                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'returned' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleStatusChange('returned')}>
+                <div className={`stat shadow bg-white rounded-lg cursor-pointer ${filter === 'returned' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => handleStatusChange('returned')}>
                     <div className="stat-title">Completed</div>
-                    <div className="stat-value text-center text-primary">{statusCounts.returned || 0}</div>
+                    <div className="stat-value text-center text-primary">{totalStatusCounts.returned || 0}</div>
                 </div>
             </div>
 

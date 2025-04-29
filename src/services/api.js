@@ -157,10 +157,9 @@ class ApiService {
         return this.request(`/rent/my${queryString ? '?' + queryString : ''}`);
     }
 
-    async updateRentalStatus(rentalId, status, type = 'order') {
-        return this.request(`/rent/${rentalId}/status`, 'PUT', {
-            type,
-            status
+    async updateRentalStatus(orderId, status, type = 'order') {
+        return this.request(`/orders/${orderId}/status`, 'PUT', {
+            [type === 'order' ? 'order_status' : 'payment_status']: status
         });
     }
 

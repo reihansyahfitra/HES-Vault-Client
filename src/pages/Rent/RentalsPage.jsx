@@ -233,16 +233,42 @@ function RentalsPage() {
         }
     };
 
-    const handleCancelRental = async (rentalId) => {
+    const handleCancelRental = async (rental) => {
         if (!window.confirm('Are you sure you want to cancel this rental request?')) return;
 
         try {
-            const response = await api.updateRentalStatus(rentalId, 'CANCELLED');
+            if (!rental || !rental.order?.id) {
+                toast.error("Order ID not found");
+                return;
+            }
+
+            if (rental.order.order_status !== 'WAITING' && rental.order.order_status !== 'APPROVED') {
+                toast.error('You can only cancel pending and approved rental requests');
+                return;
+            }
+
+            const orderId = rental.order.id;
+            const response = await fetch(`${api.baseUrl}/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.getToken()}`
+                },
+                body: JSON.stringify({
+                    order_status: 'CANCELLED'
+                })
+            });
+
             if (response.ok) {
-                toast.success('Rental has been cancelled');
+                toast.success('Rental has been cancelled successfully');
                 fetchRentals();
             } else {
-                toast.error(response.data?.message || 'Failed to cancel rental');
+                try {
+                    const errorData = await response.json();
+                    toast.error(errorData.message || 'Failed to cancel rental');
+                } catch (parseErr) {
+                    toast.error(`Failed to cancel rental (${response.status})`);
+                }
             }
         } catch (err) {
             console.error('Error cancelling rental:', err);
@@ -250,20 +276,43 @@ function RentalsPage() {
         }
     };
 
-    const handleUpdateRentalStatus = async (rentalId, newStatus, type = 'order') => {
+    const handleUpdateRentalStatus = async (rental, newStatus, type = 'order') => {
         if (!window.confirm(`Are you sure you want to mark this rental as ${newStatus.toLowerCase()}?`)) return;
 
         try {
-            const response = await api.updateRentalStatus(rentalId, newStatus, type);
+            if (!rental || !rental.order?.id) {
+                toast.error("Order ID not found");
+                return;
+            }
+
+            const orderId = rental.order.id;
+
+            const response = await fetch(`${api.baseUrl}/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.getToken()}`
+                },
+                body: JSON.stringify({
+                    [type === 'order' ? 'order_status' : 'payment_status']: newStatus
+                })
+            });
+
             if (response.ok) {
                 toast.success(`Rental ${type === 'payment' ? 'payment ' : ''}status updated to ${newStatus.toLowerCase()}`);
                 fetchRentals();
             } else {
-                toast.error(response.data?.message || 'Failed to update rental status');
+                // Handle error responses
+                try {
+                    const errorData = await response.json();
+                    toast.error(errorData.message || `Failed to update rental ${type} status`);
+                } catch (parseErr) {
+                    toast.error(`Failed to update rental ${type} status (${response.status})`);
+                }
             }
         } catch (err) {
             console.error('Error updating rental status:', err);
-            toast.error('Failed to update rental status. Please try again.');
+            toast.error(`Failed to update rental ${type} status. Please try again.`);
         }
     };
 
@@ -281,15 +330,15 @@ function RentalsPage() {
 
         return (
             <>
-                {status === 'WAITING' && (
+                {((status === 'WAITING' || status === 'APPROVED') && paymentStatus !== 'PAID') && (
                     <button
                         className="btn btn-sm btn-error w-full btn-outline gap-1"
-                        onClick={() => handleCancelRental(rental.id)}
+                        onClick={() => handleCancelRental(rental)}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        Cancel Request
+                        Cancel {status === 'WAITING' ? 'Request' : 'Rental'}
                     </button>
                 )}
 
@@ -364,7 +413,7 @@ function RentalsPage() {
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             className="btn btn-sm btn-success gap-1"
-                            onClick={() => handleUpdateRentalStatus(rental.order.id, 'APPROVED')}
+                            onClick={() => handleUpdateRentalStatus(rental, 'APPROVED')}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -373,7 +422,7 @@ function RentalsPage() {
                         </button>
                         <button
                             className="btn btn-sm btn-error gap-1"
-                            onClick={() => handleUpdateRentalStatus(rental.order.id, 'REJECTED')}
+                            onClick={() => handleUpdateRentalStatus(rental, 'REJECTED')}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -386,7 +435,7 @@ function RentalsPage() {
                 {status === 'APPROVED' && paymentStatus === 'PAID' && (
                     <button
                         className="btn btn-sm btn-success w-full gap-1"
-                        onClick={() => handleUpdateRentalStatus(rental.order.id, 'ONRENT')}
+                        onClick={() => handleUpdateRentalStatus(rental, 'ONRENT')}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
@@ -398,7 +447,7 @@ function RentalsPage() {
                 {(status === 'ACTIVE' || status === 'ONRENT' || status === 'OVERDUE') && (
                     <button
                         className="btn btn-sm btn-success w-full gap-1"
-                        onClick={() => handleUpdateRentalStatus(rental.order.id, 'RETURNED')}
+                        onClick={() => handleUpdateRentalStatus(rental, 'RETURNED')}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -410,7 +459,7 @@ function RentalsPage() {
                 {status === 'APPROVED' && paymentStatus === 'UNPAID' && (
                     <button
                         className="btn btn-sm btn-success w-full gap-1"
-                        onClick={() => handleUpdateRentalStatus(rental.order.id, 'PAID', 'payment')}
+                        onClick={() => handleUpdateRentalStatus(rental, 'PAID', 'payment')}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />

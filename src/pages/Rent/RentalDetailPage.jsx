@@ -84,7 +84,23 @@ function RentalDetailPage() {
         if (!window.confirm('Are you sure you want to cancel this rental request?')) return;
 
         try {
-            const response = await api.cancelRental(id);
+            if (rental.order.order_status !== 'WAITING' && rental.order.order_status !== 'APPROVED') {
+                toast.error('You can only cancel pending and approved rental requests');
+                return;
+            }
+
+            const orderId = rental.order.id;
+            const response = await fetch(`${api.baseUrl}/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.getToken()}`
+                },
+                body: JSON.stringify({
+                    order_status: 'CANCELLED'
+                })
+            });
+
             if (response.ok) {
                 toast.success('Rental has been cancelled');
                 fetchRentalDetails();
@@ -101,12 +117,38 @@ function RentalDetailPage() {
         if (!window.confirm(`Are you sure you want to mark this rental as ${newStatus.toLowerCase()}?`)) return;
 
         try {
-            const response = await api.updateRentalStatus(id, newStatus, type);
+            // IMPORTANT: The issue is you need to send the request to /orders endpoint, not /rent
+            // You're currently trying to update "order" status but using the rent ID and route
+            const orderId = rental.order?.id;
+
+            if (!orderId) {
+                toast.error("Order ID not found");
+                return;
+            }
+
+            const response = await fetch(`${api.baseUrl}/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.getToken()}`
+                },
+                body: JSON.stringify({
+                    [type === 'order' ? 'order_status' : 'payment_status']: newStatus
+                })
+            });
+
             if (response.ok) {
                 toast.success(`Rental ${type === 'payment' ? 'payment ' : ''}status updated to ${newStatus.toLowerCase()}`);
                 fetchRentalDetails();
             } else {
-                toast.error(response.data?.message || `Failed to update rental ${type} status`);
+                // Try to parse error response
+                try {
+                    const errorData = await response.json();
+                    toast.error(errorData.message || `Failed to update rental ${type} status`);
+                } catch (parseErr) {
+                    // If parsing fails (non-JSON response)
+                    toast.error(`Failed to update rental ${type} status (${response.status})`);
+                }
             }
         } catch (err) {
             console.error('Error updating rental status:', err);
@@ -478,6 +520,31 @@ function RentalDetailPage() {
                                                     <div className="absolute top-2 right-2">
                                                         <div className="badge badge-success">Submitted</div>
                                                     </div>
+                                                    {/* Allow re-uploading with a button overlay */}
+                                                    {(orderStatus === 'APPROVED' || orderStatus === 'ACTIVE' || orderStatus === 'ONRENT') &&
+                                                        (paymentStatus === 'PAID' || isAdmin) && (
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-base-300/80 p-2 flex justify-center">
+                                                                <label className="btn btn-xs btn-primary gap-1">
+                                                                    {uploading ? (
+                                                                        <span className="loading loading-spinner loading-xs"></span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                            </svg>
+                                                                            Replace
+                                                                        </>
+                                                                    )}
+                                                                    <input
+                                                                        type="file"
+                                                                        className="hidden"
+                                                                        accept="image/*"
+                                                                        onChange={(e) => handleDocumentUpload('before', e.target.files[0])}
+                                                                        disabled={uploading}
+                                                                    />
+                                                                </label>
+                                                            </div>
+                                                        )}
                                                 </>
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center text-center p-4">
@@ -486,27 +553,29 @@ function RentalDetailPage() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     </svg>
                                                     <span className="text-base-content/60 mb-2">No before image provided</span>
-                                                    {(orderStatus === 'ACTIVE' || orderStatus === 'ONRENT') && !rental.documentation_before && !isAdmin && (
-                                                        <label className="btn btn-primary btn-sm gap-2 animate-pulse">
-                                                            {uploading ? (
-                                                                <span className="loading loading-spinner loading-xs"></span>
-                                                            ) : (
-                                                                <>
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                                                    </svg>
-                                                                    Upload Image
-                                                                </>
-                                                            )}
-                                                            <input
-                                                                type="file"
-                                                                className="hidden"
-                                                                accept="image/*"
-                                                                onChange={(e) => handleDocumentUpload('before', e.target.files[0])}
-                                                                disabled={uploading}
-                                                            />
-                                                        </label>
-                                                    )}
+                                                    {/* Show upload button if approved/active and paid (or for admin) */}
+                                                    {(orderStatus === 'APPROVED' || orderStatus === 'ACTIVE' || orderStatus === 'ONRENT') &&
+                                                        (paymentStatus === 'PAID' || isAdmin) && (
+                                                            <label className="btn btn-primary btn-sm gap-2 animate-pulse">
+                                                                {uploading ? (
+                                                                    <span className="loading loading-spinner loading-xs"></span>
+                                                                ) : (
+                                                                    <>
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                                                        </svg>
+                                                                        Upload Image
+                                                                    </>
+                                                                )}
+                                                                <input
+                                                                    type="file"
+                                                                    className="hidden"
+                                                                    accept="image/*"
+                                                                    onChange={(e) => handleDocumentUpload('before', e.target.files[0])}
+                                                                    disabled={uploading}
+                                                                />
+                                                            </label>
+                                                        )}
                                                 </div>
                                             )}
                                         </div>
@@ -538,6 +607,31 @@ function RentalDetailPage() {
                                                     <div className="absolute top-2 right-2">
                                                         <div className="badge badge-success">Submitted</div>
                                                     </div>
+                                                    {/* Allow re-uploading with a button overlay */}
+                                                    {(orderStatus === 'APPROVED' || orderStatus === 'ACTIVE' || orderStatus === 'ONRENT' ||
+                                                        orderStatus === 'OVERDUE') && (paymentStatus === 'PAID' || isAdmin) && (
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-base-300/80 p-2 flex justify-center">
+                                                                <label className="btn btn-xs btn-primary gap-1">
+                                                                    {uploading ? (
+                                                                        <span className="loading loading-spinner loading-xs"></span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                            </svg>
+                                                                            Replace
+                                                                        </>
+                                                                    )}
+                                                                    <input
+                                                                        type="file"
+                                                                        className="hidden"
+                                                                        accept="image/*"
+                                                                        onChange={(e) => handleDocumentUpload('after', e.target.files[0])}
+                                                                        disabled={uploading}
+                                                                    />
+                                                                </label>
+                                                            </div>
+                                                        )}
                                                 </>
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center text-center p-4">
@@ -546,10 +640,9 @@ function RentalDetailPage() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     </svg>
                                                     <span className="text-base-content/60 mb-2">No after image provided</span>
-                                                    {(orderStatus === 'ACTIVE' || orderStatus === 'ONRENT' || orderStatus === 'OVERDUE') &&
-                                                        rental.documentation_before &&
-                                                        !rental.documentation_after &&
-                                                        !isAdmin && (
+                                                    {/* Show upload button for valid statuses */}
+                                                    {(orderStatus === 'APPROVED' || orderStatus === 'ACTIVE' || orderStatus === 'ONRENT' ||
+                                                        orderStatus === 'OVERDUE') && (paymentStatus === 'PAID' || isAdmin) && (
                                                             <label className="btn btn-primary btn-sm gap-2">
                                                                 {uploading ? (
                                                                     <span className="loading loading-spinner loading-xs"></span>
@@ -594,18 +687,25 @@ function RentalDetailPage() {
                                 {/* Regular user actions */}
                                 {!isAdmin && (
                                     <>
-                                        {orderStatus === 'WAITING' && (
+                                        {/* Show cancel button for both WAITING and APPROVED status */}
+                                        {((orderStatus === 'WAITING' || orderStatus === 'APPROVED') && paymentStatus !== 'PAID') && (
                                             <button
                                                 className="btn btn-error btn-block gap-2 shadow-md hover:shadow-lg transition-shadow"
                                                 onClick={handleCancelRental}
+                                                disabled={loading}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                                Cancel Request
+                                                {loading ? (
+                                                    <span className="loading loading-spinner loading-sm"></span>
+                                                ) : (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                )}
+                                                Cancel {orderStatus === 'WAITING' ? 'Request' : 'Rental'}
                                             </button>
                                         )}
 
+                                        {/* Keep other existing buttons */}
                                         {orderStatus === 'APPROVED' && paymentStatus === 'UNPAID' && (
                                             <button className="btn btn-primary btn-block gap-2 shadow-md hover:shadow-lg transition-shadow animate-pulse">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

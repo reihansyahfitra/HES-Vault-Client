@@ -13,7 +13,9 @@ import CartPage from './pages/Cart/CartPage';
 import RentFormPage from './pages/Rent/RentFormPage';
 import RentalsPage from './pages/Rent/RentalsPage';
 import RentalDetailPage from './pages/Rent/RentalDetailPage';
+import CategoriesPage from './pages/Categories/CategoriesPage';
 import './App.css';
+import UsersPage from './pages/Users/UsersPage';
 
 function App() {
   const { loading } = useAuth();
@@ -96,6 +98,20 @@ function App() {
               element={
                 <ProtectedRoute>
                   <RentalDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/categories"
+              element={
+                <ProtectedRoute>
+                  <CategoriesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/users"
+              element={
+                <ProtectedRoute>
+                  <UsersPage />
                 </ProtectedRoute>
               }
             />

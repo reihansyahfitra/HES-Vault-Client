@@ -26,7 +26,7 @@ function RentFormPage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const minStartDate = new Date(today);
-    minStartDate.setDate(today.getDate() + 1); // Start date must be at least tomorrow
+    minStartDate.setDate(today.getDate() + 2); // Start date must be at least tomorrow
 
     useEffect(() => {
         const defaultStartDate = new Date(minStartDate);

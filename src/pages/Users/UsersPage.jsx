@@ -18,16 +18,13 @@ function UsersPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [filter, setFilter] = useState('all');
-    const [sortBy, setSortBy] = useState('createdAt');
+    const [sortBy, setSortBy] = useState('created_at');
     const [sortOrder, setSortOrder] = useState('desc');
+    const [teams, setTeams] = useState([]);
 
     const [userStats, setUserStats] = useState({
         total: 0,
-        students: 0,
-        staff: 0,
-        admin: 0,
-        active: 0,
-        inactive: 0
+        teamCounts: {}
     });
 
     useEffect(() => {
@@ -37,44 +34,88 @@ function UsersPage() {
             return;
         }
 
+        // Fetch teams on initial load
+        fetchTeams();
+        // Fetch user stats on initial load
+        fetchUserStats();
+
+    }, [isAdmin]); // Only run this effect once on component mount
+
+    // Fix 5: Keep the existing useEffect for fetching users when filters change
+    useEffect(() => {
+        if (!isAdmin) return;
+
+        console.log(`Fetching users for page ${currentPage}, filter: ${filter}`);
         fetchUsers();
     }, [isAdmin, filter, currentPage, search, sortBy, sortOrder]);
+
+    const fetchTeams = async () => {
+        try {
+            const response = await api.request('/teams', 'GET', null, true);
+            console.log(response.data.data);
+            if (response.ok) {
+                setTeams(response.data.data || []);
+
+                // Create team stats for all teams, even ones with 0 users
+                const teamCounts = { ...userStats.teamCounts };
+
+                // Ensure all teams are represented in userStats
+                response.data.data.forEach(team => {
+                    if (!teamCounts[team.slug]) {
+                        teamCounts[team.slug] = {
+                            count: 0,
+                            name: team.name,
+                            color: getTeamColor(team.slug)
+                        };
+                    } else if (!teamCounts[team.slug].color) {
+                        // Add color if missing
+                        teamCounts[team.slug].color = getTeamColor(team.slug);
+                    }
+                });
+
+                setUserStats(prev => ({
+                    ...prev,
+                    teamCounts
+                }));
+            }
+        } catch (err) {
+            console.error('Error fetching teams:', err);
+        }
+    };
 
     const fetchUsers = async () => {
         if (!isAdmin) return;
 
         setLoading(true);
         try {
-            const queryParams = {
+            const filterParams = {
                 page: currentPage,
                 limit: 10,
+                search: search || undefined,
                 sort: sortBy,
-                order: sortOrder
+                order: sortOrder,
+                team: filter === 'all' ? undefined : filter
             };
 
-            if (search) {
-                queryParams.search = search;
-            }
+            console.log("Fetching users with params:", filterParams);
 
-            if (filter !== 'all') {
-                queryParams.status = filter;
-            }
-
-            // Get all users for statistics
-            const allUsersResponse = await api.request('/users?limit=1000');
-            if (allUsersResponse.ok && allUsersResponse.data) {
-                calculateUserStats(allUsersResponse.data.data || []);
-            }
-
-            // Get paginated users
-            const response = await api.request(`/users`, 'GET', null, true, queryParams);
+            const response = await api.getUsers(filterParams);
 
             if (response.ok) {
                 setUsers(response.data.data || []);
 
                 // Set pagination info
                 if (response.data.pagination) {
-                    setTotalPages(response.data.pagination.totalPages || 1);
+                    setTotalPages(response.data.pagination.pages || 1);
+
+                    // Update user stats with total count from filtered results
+                    if (filter === 'all') {
+                        const updatedStats = {
+                            ...userStats,
+                            total: response.data.pagination.total || 0
+                        };
+                        setUserStats(updatedStats);
+                    }
                 } else {
                     setTotalPages(1);
                 }
@@ -89,35 +130,80 @@ function UsersPage() {
         }
     };
 
-    const calculateUserStats = (users) => {
+    const fetchUserStats = async () => {
+        try {
+            const response = await api.request('/users/stats', 'GET', null, true);
+            console.log(response.data);
+            if (response.ok && response.data) {
+                // Add colors to team stats
+                const teamCounts = { ...response.data.teamCounts };
+
+                // Apply colors to each team
+                Object.keys(teamCounts).forEach(slug => {
+                    teamCounts[slug].color = getTeamColor(slug);
+                });
+
+                setUserStats({
+                    total: response.data.total || 0,
+                    teamCounts
+                });
+            }
+        } catch (err) {
+            console.error('Error fetching user stats:', err);
+        }
+    };
+
+    const calculateUserStats = (users, teams) => {
         const stats = {
             total: users.length,
-            students: 0,
-            staff: 0,
-            admin: 0,
-            active: 0,
-            inactive: 0
+            teamCounts: {}
         };
 
-        users.forEach(user => {
-            // Count by role
-            if (user.team?.slug === 'administrator') {
-                stats.admin++;
-            } else if (user.team?.slug === 'staff') {
-                stats.staff++;
-            } else {
-                stats.students++;
-            }
+        teams.forEach(team => {
+            stats.teamCounts[team.slug] = {
+                count: 0,
+                name: team.name,
+                color: getTeamColor(team.slug)
+            };
+        });
 
-            // Count by status
-            if (user.status === 'active') {
-                stats.active++;
-            } else {
-                stats.inactive++;
+        users.forEach(user => {
+            if (user.team?.slug && stats.teamCounts[user.team.slug]) {
+                stats.teamCounts[user.team.slug].count++;
             }
         });
 
         setUserStats(stats);
+    };
+
+    const getTeamColor = (teamSlug) => {
+        const name = teamSlug || 'default';
+
+        // Define specific colors for certain roles
+        let hue, saturation, lightness;
+
+        if (teamSlug === 'administrator') {
+            // Purple color for administrators
+            hue = 280;
+            saturation = 70;
+            lightness = 50;
+        } else {
+            // Generate deterministic color based on team name
+            const hashCode = name.split('')
+                .reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
+
+            hue = hashCode % 360;
+            saturation = 65 + (hashCode % 25);
+            lightness = 45 + (hashCode % 10);
+        }
+
+        // Return consistent HSL color values for all teams
+        return {
+            text: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+            bg: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+            border: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+            ring: `hsl(${hue}, ${saturation}%, ${lightness}%)`
+        };
     };
 
     const handleSearchChange = (e) => {
@@ -131,6 +217,7 @@ function UsersPage() {
     };
 
     const handlePageChange = (page) => {
+        console.log(`Changing to page ${page}`);
         setCurrentPage(page);
     };
 
@@ -145,26 +232,6 @@ function UsersPage() {
         }
     };
 
-    const handleUpdateUserStatus = async (userId, newStatus) => {
-        if (!window.confirm(`Are you sure you want to ${newStatus === 'active' ? 'activate' : 'deactivate'} this user?`)) return;
-
-        try {
-            const response = await api.request(`/users/${userId}/status`, 'PUT', {
-                status: newStatus
-            });
-
-            if (response.ok) {
-                toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
-                fetchUsers();
-            } else {
-                toast.error(response.data?.message || `Failed to update user status`);
-            }
-        } catch (err) {
-            console.error('Error updating user status:', err);
-            toast.error(`Failed to update user status. Please try again.`);
-        }
-    };
-
     const getRoleBadgeClass = (role) => {
         switch (role?.toLowerCase()) {
             case 'administrator':
@@ -176,14 +243,27 @@ function UsersPage() {
         }
     };
 
-    const getStatusBadgeClass = (status) => {
-        switch (status?.toLowerCase()) {
-            case 'active':
-                return 'badge-success';
-            default:
-                return 'badge-error';
-        }
-    };
+    // If user is not admin, show access denied
+    if (!isAdmin) {
+        return (
+            <div className="container mx-auto px-4 py-8">
+                <div className="alert alert-error">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Access denied. You do not have permission to view this page.</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (loading && !users.length) {
+        return (
+            <div className="flex justify-center items-center min-h-[60vh]">
+                <Spinner size="lg" />
+            </div>
+        );
+    }
 
     // If user is not admin, show access denied
     if (!isAdmin) {
@@ -225,7 +305,8 @@ function UsersPage() {
             )}
 
             {/* User Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                {/* All Users Card */}
                 <div
                     className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'all' ? 'ring-2 ring-primary border-primary border' : 'border border-base-300'}`}
                     onClick={() => handleFilterChange('all')}
@@ -237,60 +318,36 @@ function UsersPage() {
                     </div>
                 </div>
 
-                <div
-                    className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'student' ? 'ring-2 ring-info border-info border' : 'border border-base-300'}`}
-                    onClick={() => handleFilterChange('student')}
-                >
-                    <div className="card-body p-4 text-center">
-                        <div className="stat-title">Students</div>
-                        <div className="stat-value text-3xl text-info">{userStats.students || 0}</div>
-                        <div className="w-full h-1 bg-info mt-2 rounded-full"></div>
-                    </div>
-                </div>
+                {/* Dynamic Team Cards */}
+                {teams.map(team => {
+                    const teamData = userStats.teamCounts?.[team.slug] || {
+                        count: 0,
+                        name: team.name,
+                        color: getTeamColor(team.slug)
+                    };
 
-                <div
-                    className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'staff' ? 'ring-2 ring-secondary border-secondary border' : 'border border-base-300'}`}
-                    onClick={() => handleFilterChange('staff')}
-                >
-                    <div className="card-body p-4 text-center">
-                        <div className="stat-title">Staff</div>
-                        <div className="stat-value text-3xl text-secondary">{userStats.staff || 0}</div>
-                        <div className="w-full h-1 bg-secondary mt-2 rounded-full"></div>
-                    </div>
-                </div>
-
-                <div
-                    className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'admin' ? 'ring-2 ring-accent border-accent border' : 'border border-base-300'}`}
-                    onClick={() => handleFilterChange('admin')}
-                >
-                    <div className="card-body p-4 text-center">
-                        <div className="stat-title">Admins</div>
-                        <div className="stat-value text-3xl text-accent">{userStats.admin || 0}</div>
-                        <div className="w-full h-1 bg-accent mt-2 rounded-full"></div>
-                    </div>
-                </div>
-
-                <div
-                    className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'active' ? 'ring-2 ring-success border-success border' : 'border border-base-300'}`}
-                    onClick={() => handleFilterChange('active')}
-                >
-                    <div className="card-body p-4 text-center">
-                        <div className="stat-title">Active</div>
-                        <div className="stat-value text-3xl text-success">{userStats.active || 0}</div>
-                        <div className="w-full h-1 bg-success mt-2 rounded-full"></div>
-                    </div>
-                </div>
-
-                <div
-                    className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === 'inactive' ? 'ring-2 ring-error border-error border' : 'border border-base-300'}`}
-                    onClick={() => handleFilterChange('inactive')}
-                >
-                    <div className="card-body p-4 text-center">
-                        <div className="stat-title">Inactive</div>
-                        <div className="stat-value text-3xl text-error">{userStats.inactive || 0}</div>
-                        <div className="w-full h-1 bg-error mt-2 rounded-full"></div>
-                    </div>
-                </div>
+                    return (
+                        <div
+                            key={team.slug}
+                            className={`card bg-base-100 shadow-md hover:shadow-lg transition-shadow cursor-pointer ${filter === team.slug ? 'ring-2 border' : 'border border-base-300'}`}
+                            style={{
+                                ...(filter === team.slug ? {
+                                    borderColor: teamData.color.border,
+                                    ringColor: teamData.color.ring
+                                } : {})
+                            }}
+                            onClick={() => handleFilterChange(team.slug)}
+                        >
+                            <div className="card-body p-4 text-center">
+                                <div className="stat-title">{team.name}</div>
+                                <div className="stat-value text-3xl" style={{ color: teamData.color.text }}>
+                                    {teamData.count || 0}
+                                </div>
+                                <div className="w-full h-1 mt-2 rounded-full" style={{ background: teamData.color.bg }}></div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Search Area */}
@@ -313,12 +370,6 @@ function UsersPage() {
                     </svg>
                     Search
                 </button>
-                <Link to="/users/new" className="btn btn-secondary gap-2 shadow-md hover:shadow-lg w-full sm:w-auto">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
-                    </svg>
-                    Add User
-                </Link>
             </div>
 
             {users.length === 0 ? (
@@ -385,19 +436,18 @@ function UsersPage() {
                                     </th>
                                     <th className="bg-base-200 border-b border-base-300">Role</th>
                                     <th
-                                        className={`bg-base-200 border-b border-base-300 cursor-pointer ${sortBy === 'createdAt' ? 'text-primary' : ''}`}
-                                        onClick={() => handleSortChange('createdAt')}
+                                        className={`bg-base-200 border-b border-base-300 cursor-pointer ${sortBy === 'created_at' ? 'text-primary' : ''}`}
+                                        onClick={() => handleSortChange('created_at')}
                                     >
                                         <div className="flex items-center gap-1">
                                             Joined
-                                            {sortBy === 'createdAt' && (
+                                            {sortBy === 'created_at' && (
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={sortOrder === 'asc' ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
                                                 </svg>
                                             )}
                                         </div>
                                     </th>
-                                    <th className="bg-base-200 border-b border-base-300">Status</th>
                                     <th className="bg-base-200 border-b border-base-300">Actions</th>
                                 </tr>
                             </thead>
@@ -431,13 +481,11 @@ function UsersPage() {
                                                 </div>
                                                 <div>
                                                     <div className="font-bold">{user.name}</div>
-                                                    <div className="text-xs opacity-60">ID: {user.identification || 'N/A'}</div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <div className="font-mono text-sm">{user.email}</div>
-                                            <div className="text-xs opacity-60">{user.phone || 'No phone'}</div>
                                         </td>
                                         <td>
                                             <span className={`badge ${getRoleBadgeClass(user.team?.slug)} badge-sm`}>
@@ -446,11 +494,6 @@ function UsersPage() {
                                         </td>
                                         <td>
                                             {user.created_at && format(new Date(user.created_at), 'dd MMM yyyy')}
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${getStatusBadgeClass(user.status)} badge-sm`}>
-                                                {user.status || 'Unknown'}
-                                            </span>
                                         </td>
                                         <td>
                                             <div className="flex items-center gap-2">
@@ -473,27 +516,6 @@ function UsersPage() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                     </svg>
                                                 </Link>
-                                                {user.status === 'active' ? (
-                                                    <button
-                                                        onClick={() => handleUpdateUserStatus(user.id, 'inactive')}
-                                                        className="btn btn-square btn-sm btn-ghost text-error tooltip tooltip-left"
-                                                        data-tip="Deactivate User"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                                        </svg>
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleUpdateUserStatus(user.id, 'active')}
-                                                        className="btn btn-square btn-sm btn-ghost text-success tooltip tooltip-left"
-                                                        data-tip="Activate User"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                    </button>
-                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -543,12 +565,6 @@ function UsersPage() {
                                             {user.team?.name || 'User'}
                                         </span>
                                     </div>
-                                    <div>
-                                        <div className="text-xs text-base-content/70">Status</div>
-                                        <span className={`badge ${getStatusBadgeClass(user.status)}`}>
-                                            {user.status || 'Unknown'}
-                                        </span>
-                                    </div>
                                 </div>
 
                                 <div className="flex justify-between items-center">
@@ -570,27 +586,6 @@ function UsersPage() {
                                             </svg>
                                             View
                                         </Link>
-                                        {user.status === 'active' ? (
-                                            <button
-                                                onClick={() => handleUpdateUserStatus(user.id, 'inactive')}
-                                                className="btn btn-sm btn-error btn-outline"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                                </svg>
-                                                Disable
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => handleUpdateUserStatus(user.id, 'active')}
-                                                className="btn btn-sm btn-success btn-outline"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Enable
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -612,23 +607,34 @@ function UsersPage() {
                         </button>
 
                         {Array.from({ length: totalPages }, (_, i) => {
-                            // On mobile, only show current page and immediate neighbors
-                            const isMobile = window.innerWidth < 640;
-                            if (isMobile &&
-                                !(i === 0 || i === totalPages - 1 ||
-                                    Math.abs(i + 1 - currentPage) <= 1)) {
-                                return null;
+                            const page = i + 1;
+                            // Show first page, last page, current page and pages around current
+                            if (
+                                page === 1 ||
+                                page === totalPages ||
+                                Math.abs(page - currentPage) <= 1
+                            ) {
+                                return (
+                                    <button
+                                        key={i}
+                                        className={`join-item btn btn-sm sm:btn-md ${currentPage === page ? 'btn-active' : ''}`}
+                                        onClick={() => handlePageChange(page)}
+                                    >
+                                        {page}
+                                    </button>
+                                );
                             }
 
-                            return (
-                                <button
-                                    key={i}
-                                    className={`join-item btn btn-sm sm:btn-md ${currentPage === i + 1 ? 'btn-active' : ''}`}
-                                    onClick={() => handlePageChange(i + 1)}
-                                >
-                                    {i + 1}
-                                </button>
-                            );
+                            // Show ellipsis between page groups
+                            if (page === currentPage - 2 || page === currentPage + 2) {
+                                return (
+                                    <button key={i} className="join-item btn btn-sm sm:btn-md btn-disabled">
+                                        ...
+                                    </button>
+                                );
+                            }
+
+                            return null;
                         })}
 
                         <button

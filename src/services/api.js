@@ -27,7 +27,7 @@ class ApiService {
         return headers;
     }
 
-    async request(endpoint, method = 'GET', data = null, includeAuth = true) {
+    async request(endpoint, method = 'GET', data = null, includeAuth = true, queryParams = null) {
         const options = {
             method,
             headers: this.getHeaders(includeAuth),
@@ -37,8 +37,25 @@ class ApiService {
             options.body = JSON.stringify(data);
         }
 
+        // Handle query parameters
+        let url = `${this.baseUrl}${endpoint}`;
+        if (queryParams) {
+            const queryString = new URLSearchParams();
+            for (const [key, value] of Object.entries(queryParams)) {
+                if (value !== undefined && value !== null) {
+                    queryString.append(key, value);
+                }
+            }
+
+            if (queryString.toString()) {
+                url += `?${queryString.toString()}`;
+            }
+        }
+
+        console.log(`Making API request to: ${url}`);
+
         try {
-            const response = await fetch(`${this.baseUrl}${endpoint}`, options);
+            const response = await fetch(url, options);
             const result = await response.json();
 
             return {
@@ -54,6 +71,37 @@ class ApiService {
                 data: { message: error.message }
             };
         }
+    }
+
+    getUsers(params = {}) {
+        const queryParams = {
+            page: params.page || 1,
+            limit: params.limit || 10,
+            sort: params.sort || 'created_at',
+            order: params.order || 'desc',
+            team: params.team === 'all' ? undefined : params.team,
+            search: params.search || undefined
+        };
+
+        Object.keys(queryParams).forEach(key =>
+            queryParams[key] === undefined && delete queryParams[key]
+        );
+
+        console.log("API getUsers params:", queryParams);
+
+        return this.request('/users', 'GET', null, true, queryParams);
+    }
+
+    getUser(id) {
+        return this.request(`/users/${id}`);
+    }
+
+    updateUser(id, userData) {
+        return this.request(`/users/${id}`, 'PUT', userData);
+    }
+
+    deleteUser(id) {
+        return this.request(`/users/${id}`, 'DELETE');
     }
 
     login(email, password) {
